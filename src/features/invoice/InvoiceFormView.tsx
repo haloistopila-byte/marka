@@ -187,6 +187,7 @@ const Form: React.FC<{ initial: InvoiceInput; originalNum?: string }> = ({ initi
           <ItemsEditor title="Add-on" items={draft.addonItems} onChange={v => set('addonItems', v)} />
 
           <Panel title="Metode pembayaran" description="QRIS dan nilai awal rekening diatur di Pengaturan.">
+            {!draft.bankAcc.trim() && <Notice tone="warn" className="mb-4">Nomor rekening masih kosong dan akan tercetak kosong di invoice. Isi di sini, atau atur nilai awalnya di Pengaturan.</Notice>}
             <div className="grid gap-4 sm:grid-cols-3">
               <Field label="Bank" htmlFor="f-bankName"><Input {...bind('bankName')} /></Field>
               <Field label="Nomor rekening" htmlFor="f-bankAcc"><Input {...bind('bankAcc')} /></Field>

@@ -22,9 +22,10 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  bankName: 'BCA',
-  bankAcc: '7265279911',
-  bankHolder: 'BENNI SETIAWAN',
+  // Rekening diisi di Pengaturan dan hanya tersimpan di browser, supaya tidak masuk ke repo
+  bankName: '',
+  bankAcc: '',
+  bankHolder: '',
   note: '• Pelunasan maksimal H-3 sebelum hari H (keterlambatan pembayaran akan dikenakan denda).\n• DP akan hangus jika acara batal secara sepihak dan tidak dapat dikembalikan.',
   qris: '',
   webhookUrl: '',
