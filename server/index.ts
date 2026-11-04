@@ -30,7 +30,12 @@ export async function startServer(rootDir: string, isProd: boolean) {
 
   app.use(errorHandler);
 
-  app.listen(config.port, '0.0.0.0', () => {
+  // Express 5 also calls this when listening fails, for example when the port is already taken
+  app.listen(config.port, '0.0.0.0', (err?: Error) => {
+    if (err) {
+      console.error(`[Server] Gagal jalan di port ${config.port}: ${err.message}`);
+      process.exit(1);
+    }
     console.log(`[Server] Marka Photobooth running on port ${config.port} (${isProd ? 'production' : 'development'})`);
   });
 }
