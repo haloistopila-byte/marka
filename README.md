@@ -16,7 +16,13 @@ npm test
 npm run lint
 ```
 
-Untuk produksi, `npm run build` lalu `npm start`. Variabel environment ada di `.env.example`.
+Variabel environment untuk server Express ada di `.env.example`.
+
+## Deploy
+
+Produksi di Vercel, diatur oleh `vercel.json`. Vercel hanya menyajikan hasil `vite build`, jadi server Express di `server/` hanya jalan saat `npm run dev`. Akibatnya `BASIC_AUTH_*` dan `/api/health` tidak berlaku di Vercel, dan header keamanan diatur di `vercel.json`. Data tetap dijaga oleh login dan `firestore.rules`.
+
+Setiap domain Vercel yang dipakai untuk login harus didaftarkan di Authorized domains (lihat bagian Firebase). Alamat preview Vercel berubah-ubah, jadi login tidak jalan di sana kecuali alamatnya didaftarkan.
 
 ## Isi
 
