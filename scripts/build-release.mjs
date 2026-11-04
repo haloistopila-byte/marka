@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { builtinModules } from 'node:module';
-import { cpSync, globSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, globSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,6 +21,7 @@ const APP = path.join(ROOT, 'build', 'release-stage');
 // Files in the install folder go past C:\Users\<name>\AppData\Local\Programs\Marka Photobooth\app\
 const INSTALL_PREFIX_LENGTH = 75;
 const WINDOWS_MAX_PATH = 259;
+const WINDOWS_BAD_NAME = /[<>:"|?*\\]|[. ]$|^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i;
 
 function run(command, args, cwd = ROOT) {
   const r = spawnSync(command, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
@@ -68,7 +69,8 @@ function stageApp(manifest) {
   writeFileSync(path.join(APP, 'package.json'), JSON.stringify({ name, version, private: true, type: 'module', dependencies }, null, 2));
   // The lockfile keeps the versions identical to what the project was tested with
   cpSync(path.join(ROOT, 'package-lock.json'), path.join(APP, 'package-lock.json'));
-  run('npm', ['install', '--omit=dev', '--ignore-scripts', '--os=win32', '--cpu=x64', '--no-audit', '--no-fund'], APP);
+  // --no-bin-links: tar on Windows cannot create the symlinks npm otherwise puts in node_modules/.bin
+  run('npm', ['install', '--omit=dev', '--ignore-scripts', '--no-bin-links', '--os=win32', '--cpu=x64', '--no-audit', '--no-fund'], APP);
   rmSync(path.join(APP, 'package-lock.json'));
 
   // Not needed at runtime, and every file slows down antivirus on the first start
@@ -78,8 +80,23 @@ function stageApp(manifest) {
   const binaries = globSync('node_modules/**/*.{node,exe,dll}', { cwd: APP });
   if (binaries.length) throw new Error(`Ada file biner yang akan diblokir di Windows:\n${binaries.join('\n')}`);
 
-  const longest = globSync('**/*', { cwd: APP }).reduce((a, b) => (b.length > a.length ? b : a), '');
-  if (longest.length + INSTALL_PREFIX_LENGTH > WINDOWS_MAX_PATH) throw new Error(`Path terlalu panjang untuk Windows: ${longest}`);
+  assertUnpacksOnWindows();
+}
+
+/** A file Windows cannot create makes the whole install or update fail, so it must stop the build. */
+function assertUnpacksOnWindows() {
+  const problems = [];
+  const seen = new Set();
+  for (const entry of readdirSync(APP, { recursive: true, withFileTypes: true })) {
+    const relative = path.relative(APP, path.join(entry.parentPath, entry.name));
+    if (entry.isSymbolicLink()) problems.push(`symlink: ${relative}`);
+    if (WINDOWS_BAD_NAME.test(entry.name)) problems.push(`nama tidak valid: ${relative}`);
+    if (relative.length + INSTALL_PREFIX_LENGTH > WINDOWS_MAX_PATH) problems.push(`path terlalu panjang: ${relative}`);
+    const folded = relative.toLowerCase();
+    if (seen.has(folded)) problems.push(`bentrok huruf besar-kecil: ${relative}`);
+    seen.add(folded);
+  }
+  if (problems.length) throw new Error(`Paket tidak bisa diekstrak di Windows:\n${problems.join('\n')}`);
 }
 
 async function nodeRelease() {
