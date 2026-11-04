@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+/*
+ * Marka Photobooth design tokens.
+ * One ground (album-paper stone), white surfaces, ink chrome, one data hue (#1d5fbf) for the main figure
+ * of a chart, and pale status pairs. Surfaces are separated by a 1px line or one tone step, never a
+ * resting shadow; only what floats (menus, dialogs, sheets, toasts) casts one.
+ */
+@theme {
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-ui: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Text in three tiers, all at 4.5:1 or more on the ground */
+  --color-ink: #0a0a0a;
+  --color-ink-2: #525252;
+  --color-ink-3: #6b6b6b;
+
+  /* Grounds and surfaces */
+  --color-canvas: #f4f4f2;   /* page ground */
+  --color-shell: #efeeeb;    /* one step down: wells, hovered rows, secondary fills */
+  --color-chip: #e7e6e2;     /* active nav pill, secondary button, neutral pill */
+  --color-line: #e5e4e0;     /* card and panel edges */
+  --color-rule: #efeee9;     /* row rules inside tables and lists */
+  --color-control: #d3d2cd;  /* input and select borders */
+
+  /* Primary action */
+  --color-night: #141414;
+  --color-night-2: #2b2b2b;
+
+  /* The one data hue */
+  --color-data: #1d5fbf;
+  --color-data-soft: #e9eff9;
+
+  /* Status pairs: a pale tint with dark ink of the same hue */
+  --color-ok: #2e7d32;
+  --color-ok-bg: #e4f4e8;
+  --color-ok-line: #c3e3cc;
+  --color-ok-ink: #14532d;
+  --color-warn: #92400e;
+  --color-warn-bg: #fdf6e7;
+  --color-warn-line: #efdcae;
+  --color-alert: #c4242a;
+  --color-alert-bg: #fdeeec;
+  --color-alert-line: #f3cbc7;
+  --color-alert-ink: #831c1e;
+
+  --radius-card: 8px;
+  --radius-control: 6px;
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply font-sans text-ink bg-canvas antialiased;
+    font-size: 14px;
+    line-height: 20px;
+    font-feature-settings: 'tnum' 1, 'cv11' 1;
+  }
+  ::selection {
+    background: #dcdad4;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    /* Inherit colour: headings on dark panels must stay readable */
+    @apply font-display tracking-normal;
+    color: inherit;
+  }
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]), label[for], select {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    opacity: 0.4;
+  }
+}
+
+/* Numbers that line up: tables, KPIs and anything that updates */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbars that stay out of the way */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d6d5d0;
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b9b8b2;
+  background-clip: padding-box;
+  border: 3px solid transparent;
+}
+
+/* Number fields carry their unit as a suffix; the browser's spin arrows would sit on top of it */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Mobile utilities */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.safe-area-pb {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+.touch-pan-x {
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+.touch-pan-y {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

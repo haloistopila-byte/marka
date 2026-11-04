@@ -1,0 +1,62 @@
+/* The printed invoice keeps Marka's own look: Poppins, black and gold on white. */
+.inv{font-family:'Poppins',sans-serif;color:#111;background:#fff;padding:0;max-width:100%}
+.inv-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;gap:20px}
+.inv-brand img{height:58px;object-fit:contain}
+.inv-meta{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.inv-badge{display:inline-block;padding:5px 18px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.badge-unpaid{background:#FFF3CD;color:#7D6608;border:1px solid #FFC107}
+.badge-partial{background:#CCE5FF;color:#004085;border:1px solid #007BFF}
+.badge-paid{background:#D4EDDA;color:#155724;border:1px solid #28A745}
+.inv-meta-tbl{font-size:11.5px;color:#777;border-collapse:collapse}
+.inv-meta-tbl td{padding:3px 8px}
+.inv-meta-tbl td:last-child{font-weight:600;color:#111;text-align:right}
+.inv-divider{height:2px;background:linear-gradient(90deg,#D4AF37,#F0D060 50%,#D4AF37);margin:18px 0}
+.inv-parties{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:20px}
+.inv-label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#D4AF37;margin-bottom:5px}
+.inv-party-name{font-size:14px;font-weight:700;color:#111;margin-bottom:2px}
+.inv-parties p{font-size:11.5px;color:#555;line-height:1.9}
+.inv-tbl{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:12.5px}
+.inv-tbl th{background:#0A0A0A;color:#D4AF37;font-weight:600;font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;padding:9px 12px;text-align:left}
+.inv-tbl th:nth-child(n+3){text-align:right}
+.inv-tbl td{padding:9px 12px;border-bottom:1px solid #eee;color:#222}
+.inv-tbl td:nth-child(1){color:#bbb;width:28px}
+.inv-tbl td:nth-child(n+3){text-align:right}
+.inv-tbl td:nth-child(5){font-weight:700;color:#D4AF37}
+.inv-tbl tbody tr:last-child td{border-bottom:none}
+.inv-totals{display:flex;justify-content:flex-end;margin-bottom:22px}
+.inv-totals-inner{width:280px;display:flex;flex-direction:column;gap:1px}
+.inv-trow{display:flex;justify-content:space-between;padding:5px 12px;font-size:12.5px;color:#555}
+.inv-trow.grand{background:#0A0A0A;color:#D4AF37;font-weight:700;font-size:14px;border-radius:6px;margin-top:4px}
+.inv-payment{background:#F7F7F7;border-radius:8px;padding:14px 18px;margin-bottom:22px}
+.inv-prow{display:flex;justify-content:space-between;font-size:12.5px;color:#555;padding:5px 0;border-bottom:1px solid #eee}
+.inv-prow:last-child{border:none;font-weight:700;font-size:13.5px;color:#C0392B;padding-top:8px;margin-top:2px}
+.inv-bankqris{display:flex;gap:40px;margin-bottom:22px;align-items:flex-start}
+.inv-bank p{font-size:12px;color:#333;line-height:2}
+.inv-qris img{max-width:96px;max-height:96px;object-fit:contain;border:1px solid #ddd;border-radius:6px}
+.inv-note{background:#FFFEF0;border-left:3px solid #D4AF37;padding:11px 15px;border-radius:0 6px 6px 0;margin-bottom:22px}
+.inv-note-text{font-size:11.5px;color:#555;white-space:pre-line;margin-top:5px}
+.inv-footer{text-align:center}
+.inv-thanks{font-size:12.5px;color:#555;line-height:1.9}
+.inv-thanks strong{color:#D4AF37}
+.inv-tbl tr,.inv-payment,.inv-bankqris,.inv-note,.inv-totals{break-inside:avoid}
+.inv-meta-tbl td,.inv-tbl td:nth-child(n+3){white-space:nowrap}
+
+/* Preview on a phone: the same sheet, tightened to fit without sideways scrolling */
+@media screen and (max-width:560px){
+  .inv-brand img{height:40px}
+  .inv-tbl{font-size:11px}
+  .inv-tbl th{padding:7px 5px;letter-spacing:.04em}
+  .inv-tbl td{padding:7px 5px}
+  .inv-tbl td:nth-child(1){width:18px}
+  .inv-totals-inner{width:100%}
+}
+
+/* Only the copy in #invoice-print goes to paper. It stays in normal flow so a long invoice runs on to a second page. */
+#invoice-print{display:none}
+@media print{
+  @page{size:A4 portrait;margin:14mm 15mm}
+  html,body{height:auto!important;background:#fff!important}
+  body>:not(#invoice-print){display:none!important}
+  #invoice-print{display:block!important}
+  #invoice-print *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
