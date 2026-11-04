@@ -19,7 +19,7 @@ function sortKey(r: Invoice): [number, number] {
   return r.evStatus === 'Terjadwal' && d !== null && d >= 0 ? [0, d] : [1, d === null ? 99999 : -d];
 }
 
-const Countdown: React.FC<{ r: Invoice }> = ({ r }) => {
+export const Countdown: React.FC<{ r: Invoice }> = ({ r }) => {
   const d = daysUntil(r.evDate);
   if (r.evStatus !== 'Terjadwal' || d === null) return null;
   if (d < 0) return <Badge tone="warn">Lewat {-d} hari</Badge>;
@@ -93,7 +93,7 @@ export const DashboardView: React.FC = () => {
   };
 
   const remove = async (num: string) => {
-    const ok = await confirmDialog({ title: `Hapus invoice ${num}?`, body: 'Tidak bisa dibatalkan. Data yang sudah terkirim ke Google tidak ikut terhapus.', confirmLabel: 'Hapus', tone: 'danger' });
+    const ok = await confirmDialog({ title: `Hapus invoice ${num}?`, body: 'Tidak bisa dibatalkan. Event di Google Calendar ikut dihapus kalau sinkron aktif, tapi data yang terkirim lewat Apps Script tetap ada.', confirmLabel: 'Hapus', tone: 'danger' });
     if (!ok) return;
     try {
       deleteInvoice(num);

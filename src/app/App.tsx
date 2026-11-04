@@ -1,12 +1,13 @@
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { FilePlus2, LayoutDashboard, LogOut, Settings, type LucideIcon } from 'lucide-react';
+import { CalendarDays, FilePlus2, LayoutDashboard, LogOut, Settings, type LucideIcon } from 'lucide-react';
 import { Button, cx } from '../components/ui';
 import { ConfirmHost, Toaster } from '../components/ui/feedback';
 import { signOutUser, useSession } from '../features/auth/session.ts';
 
 const LINKS: Array<{ to: string; label: string; icon: LucideIcon }> = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/kalender', label: 'Kalender', icon: CalendarDays },
   { to: '/invoice/baru', label: 'Invoice baru', icon: FilePlus2 },
   { to: '/pengaturan', label: 'Pengaturan', icon: Settings }
 ];

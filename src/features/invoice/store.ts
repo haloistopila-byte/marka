@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { collection, doc, onSnapshot, setDoc, writeBatch, type FirestoreError } from 'firebase/firestore';
 import { notify } from '../../components/ui/feedback';
 import { db } from '../../lib/firebase.ts';
-import { finalizeInvoice, nextInvoiceNumber, normalizeInvoice, toIso, type Invoice, type InvoiceInput } from './figures.ts';
+import { finalizeInvoice, invoiceDocId, nextInvoiceNumber, normalizeInvoice, toIso, type Invoice, type InvoiceInput } from './figures.ts';
 
 /**
  * Firestore, behind the same synchronous functions the screens always used. Live listeners keep a
@@ -13,6 +13,7 @@ import { finalizeInvoice, nextInvoiceNumber, normalizeInvoice, toIso, type Invoi
  *   app/settings        bank details, note, Apps Script
  *   app/qris            the image, on its own because a document holds at most 1 MB
  *   app/counters        the last invoice number used
+ *   app/calendar        Google Calendar connection and sync results, written only by the server
  */
 
 export interface Settings {
@@ -23,7 +24,28 @@ export interface Settings {
   qris: string;
   webhookUrl: string;
   autoSend: boolean;
+  calendarId: string;
+  calendarAutoSync: boolean;
 }
+
+export interface CalendarLogEntry {
+  at: string;
+  invNum: string;
+  custName: string;
+  action: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface CalendarStatus {
+  connected: boolean;
+  accountEmail: string;
+  /** Invoice document id to the updatedAt last sent to Google. */
+  synced: Record<string, string>;
+  log: CalendarLogEntry[];
+}
+
+const NO_CALENDAR: CalendarStatus = { connected: false, accountEmail: '', synced: {}, log: [] };
 
 export const DEFAULT_SETTINGS: Settings = {
   // Rekening diisi di Pengaturan, supaya tidak masuk ke repo
@@ -33,7 +55,9 @@ export const DEFAULT_SETTINGS: Settings = {
   note: '• Pelunasan maksimal H-3 sebelum hari H (keterlambatan pembayaran akan dikenakan denda).\n• DP akan hangus jika acara batal secara sepihak dan tidak dapat dikembalikan.',
   qris: '',
   webhookUrl: '',
-  autoSend: false
+  autoSend: false,
+  calendarId: '',
+  calendarAutoSync: true
 };
 
 /** Leaves room under Firestore's 1 MB document limit. */
@@ -54,8 +78,7 @@ const settingsDoc = doc(appRef, 'settings');
 const qrisDoc = doc(appRef, 'qris');
 const countersDoc = doc(appRef, 'counters');
 
-/** Invoice numbers are free text, but a document id cannot contain "/", be ".", or look like __x__. */
-const invoiceDoc = (num: string) => doc(invoicesRef, encodeURIComponent(num).replace(/\./g, '%2E').replace(/_/g, '%5F'));
+const invoiceDoc = (num: string) => doc(invoicesRef, invoiceDocId(num));
 
 // ------------------------------------------------------------------ live copy of the data
 
@@ -67,6 +90,8 @@ let unsentSettings: Partial<Settings> = {};
 let qris = '';
 let seq = 0;
 let settings: Settings = DEFAULT_SETTINGS;
+let calendar: CalendarStatus = NO_CALENDAR;
+let caughtUpWithServer = false;
 
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach(l => l());
@@ -91,6 +116,8 @@ function clearData() {
   unsentSettings = {};
   qris = '';
   seq = 0;
+  calendar = NO_CALENDAR;
+  caughtUpWithServer = false;
   rebuildSettings();
 }
 
@@ -111,6 +138,8 @@ export function connectStore() {
 
   const stopInvoices = onSnapshot(
     invoicesRef,
+    // Metadata changes included: they are what says a save has reached the server
+    { includeMetadataChanges: true },
     snap => {
       invoices = Object.fromEntries(
         snap.docs.map(d => {
@@ -118,6 +147,7 @@ export function connectStore() {
           return [inv.invNum, inv];
         })
       );
+      caughtUpWithServer = !snap.metadata.hasPendingWrites && !snap.metadata.fromCache;
       haveInvoices = true;
       arrived();
     },
@@ -130,6 +160,7 @@ export function connectStore() {
       savedSettings = (data('settings') as Partial<Settings>) ?? {};
       qris = String(data('qris')?.image ?? '');
       seq = Number(data('counters')?.seq) || 0;
+      calendar = { ...NO_CALENDAR, ...(data('calendar') as Partial<CalendarStatus> | undefined) };
       rebuildSettings();
       haveApp = true;
       arrived();
@@ -155,7 +186,13 @@ export function connectStore() {
 const statusSnapshot = () => status;
 const invoiceSnapshot = () => invoices;
 const settingsSnapshot = () => settings;
+const calendarSnapshot = () => calendar;
 
+export const subscribeStore = subscribe;
+export const getInvoices = invoiceSnapshot;
+export const getCalendarStatus = calendarSnapshot;
+export const isCaughtUpWithServer = () => caughtUpWithServer;
+export const useCalendarStatus = () => useSyncExternalStore(subscribe, calendarSnapshot);
 export const useStoreStatus = () => useSyncExternalStore(subscribe, statusSnapshot);
 export const useInvoices = () => useSyncExternalStore(subscribe, invoiceSnapshot);
 export const useSettings = () => useSyncExternalStore(subscribe, settingsSnapshot);

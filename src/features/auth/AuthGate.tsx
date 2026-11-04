@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { LogIn, LogOut, RefreshCw } from 'lucide-react';
 import { Button, Notice } from '../../components/ui';
+import { startCalendarSync } from '../calendar/sync.ts';
 import { connectStore, useStoreStatus } from '../invoice/store.ts';
 import { signInWithGoogle, signOutUser, useSession } from './session.ts';
 
@@ -46,7 +47,15 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const status = useStoreStatus();
   const uid = session.state === 'in' ? session.user.uid : null;
 
-  useEffect(() => (uid ? connectStore() : undefined), [uid]);
+  useEffect(() => {
+    if (!uid) return;
+    const disconnect = connectStore();
+    const stopSync = startCalendarSync();
+    return () => {
+      stopSync();
+      disconnect();
+    };
+  }, [uid]);
 
   if (session.state === 'loading') return <Loading />;
   if (session.state === 'out') return <Login />;
