@@ -1,7 +1,7 @@
 {
-  "version": "0.2.0",
-  "file": "marka-app-0.2.0.zip",
-  "sha256": "c891aca39ce27250be1f8f66118acf7758e0a55f3bd5aaa4defb4845e4c0b3a8",
+  "version": "0.2.1",
+  "file": "marka-app-0.2.1.zip",
+  "sha256": "5365dfca4be40cec37a262aeb20c11753ee3a952c5d9fed26fad28ff5788304d",
   "node": {
     "version": "v26.13.0",
     "url": "https://nodejs.org/dist/v26.13.0/node-v26.13.0-win-x64.zip",
