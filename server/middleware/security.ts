@@ -15,6 +15,8 @@ export function applySecurity(app: Express, isProd: boolean) {
       // A CSP needs testing in production first (Google Fonts, Vite in dev)
       contentSecurityPolicy: false,
       crossOriginEmbedderPolicy: false,
+      // Google's login popup reports back to this window; the stricter default cuts that link
+      crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
       hsts: isProd ? { maxAge: 15552000, includeSubDomains: true } : false
     })

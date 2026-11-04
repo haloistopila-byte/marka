@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// Invoices hold customer and bank details, so only the team's verified emails get in.
+// To add someone, add their email to the list and run: firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isTeam() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['markaselfstudio@gmail.com'];
+    }
+
+    match /invoices/{invoice} {
+      allow read, write: if isTeam();
+    }
+
+    match /app/{name} {
+      allow read: if isTeam();
+      allow write: if isTeam() && name in ['settings', 'qris', 'counters'];
+    }
+  }
+}

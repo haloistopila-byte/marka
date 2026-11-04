@@ -8,7 +8,6 @@ import { EVENT_STATUSES, PAY_STATUSES, daysUntil, formatDate, formatMoney, toIso
 import { InvoiceDocument } from '../invoice/InvoiceDocument';
 import { PAY_TONE } from '../invoice/InvoiceFormView';
 import { StorageFullError, deleteInvoice, getInvoice, saveInvoice, useInvoices, useSettings } from '../invoice/store.ts';
-import { loadSampleData } from './sampleData';
 
 function failed(err: unknown) {
   notify(err instanceof StorageFullError ? err.message : 'Gagal menyimpan perubahan.', 'alert');
@@ -144,12 +143,7 @@ export const DashboardView: React.FC = () => {
               <EmptyState
                 title="Belum ada invoice"
                 description="Buat invoice pertama, atau pulihkan backup dari app lama di Pengaturan."
-                action={
-                  <div className="flex flex-wrap justify-center gap-2">
-                    <Button variant="primary" icon={Plus} onClick={() => navigate('/invoice/baru')}>Invoice baru</Button>
-                    {import.meta.env.DEV && <Button onClick={loadSampleData}>Muat data contoh</Button>}
-                  </div>
-                }
+                action={<Button variant="primary" icon={Plus} onClick={() => navigate('/invoice/baru')}>Invoice baru</Button>}
               />
             )}
           </div>
@@ -213,7 +207,7 @@ export const DashboardView: React.FC = () => {
         )}
       </Panel>
       <p className="text-[12px] text-ink-3">
-        Data tersimpan di browser ini saja. <Link to="/pengaturan" className="underline underline-offset-4">Backup secara berkala</Link>, terutama sebelum membersihkan data browser.
+        Data tersimpan di server dan sama di semua perangkat tim. <Link to="/pengaturan" className="underline underline-offset-4">Backup secara berkala</Link> untuk berjaga-jaga.
       </p>
 
       <Dialog

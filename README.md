@@ -24,12 +24,16 @@ Untuk produksi, `npm run build` lalu `npm start`. Variabel environment ada di `.
 - **Invoice**: form, preview, PDF lewat dialog cetak browser.
 - **Pengaturan**: rekening, catatan, QRIS, Apps Script, backup dan restore. Restore menerima backup dari app HTML lama.
 
-## Status: fase lokal
+## Firebase
 
-Data tersimpan di `localStorage` browser, belum ada login. Layar hanya mengakses data lewat `src/features/invoice/store.ts`, jadi Firebase cukup menggantikan file itu.
+Project `marka-96250`, dikelola dengan akun `markaselfstudio@gmail.com`. Login memakai Google, data di Firestore (`asia-southeast2`). Layar hanya mengakses data lewat `src/features/invoice/store.ts`.
 
-Belum dibuat, menunggu project Firebase milik Marka:
+Saat dijalankan lokal, app juga memakai database sungguhan ini, bukan database uji.
 
-- Login dan akun tim
-- Penyimpanan di Firestore
+- **Menambah anggota tim:** tambahkan emailnya di `firestore.rules`, lalu `firebase deploy --only firestore:rules`.
+- **Domain baru:** daftarkan di Firebase Console, Authentication, Settings, Authorized domains. `localhost` sudah terdaftar.
+- **Data versi lama:** data di `localStorage` browser dipindahkan lewat tombol di Pengaturan.
+
+Belum dibuat:
+
 - Sync otomatis ke Google Calendar. Sementara ini ada tombol "Tambah ke Google Calendar" dan kiriman ke Apps Script.
