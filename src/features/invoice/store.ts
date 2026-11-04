@@ -1,15 +1,19 @@
 import { useSyncExternalStore } from 'react';
+import { collection, doc, onSnapshot, setDoc, writeBatch, type FirestoreError } from 'firebase/firestore';
+import { notify } from '../../components/ui/feedback';
+import { db } from '../../lib/firebase.ts';
 import { finalizeInvoice, nextInvoiceNumber, normalizeInvoice, toIso, type Invoice, type InvoiceInput } from './figures.ts';
 
 /**
- * Local storage for this phase: everything lives in this browser. Screens only use the functions
- * below, so Firestore can replace them later without touching the screens.
+ * Firestore, behind the same synchronous functions the screens always used. Live listeners keep a
+ * copy in memory: reads come from it, and a write changes it at once and goes to the server behind
+ * the scenes. The SDK takes back a write the server refuses, and writeFailed tells the person.
+ *
+ *   invoices/{number}   one document per invoice
+ *   app/settings        bank details, note, Apps Script
+ *   app/qris            the image, on its own because a document holds at most 1 MB
+ *   app/counters        the last invoice number used
  */
-
-const KEY_INVOICES = 'marka_invoices';
-const KEY_DAMAGED = 'marka_invoices_rusak';
-const KEY_SEQ = 'marka_seq';
-const KEY_SETTINGS = 'marka_settings';
 
 export interface Settings {
   bankName: string;
@@ -22,7 +26,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  // Rekening diisi di Pengaturan dan hanya tersimpan di browser, supaya tidak masuk ke repo
+  // Rekening diisi di Pengaturan, supaya tidak masuk ke repo
   bankName: '',
   bankAcc: '',
   bankHolder: '',
@@ -32,114 +36,180 @@ export const DEFAULT_SETTINGS: Settings = {
   autoSend: false
 };
 
+/** Leaves room under Firestore's 1 MB document limit. */
+export const MAX_QRIS_CHARS = 1_000_000;
+
 export class StorageFullError extends Error {
-  constructor() {
-    super('Penyimpanan browser penuh. Data belum tersimpan.');
+  constructor(message = 'Data terlalu besar untuk disimpan.') {
+    super(message);
   }
 }
 
+export type StoreStatus = 'loading' | 'ready' | 'denied' | 'error';
 type InvoiceMap = Record<string, Invoice>;
 
-function write(key: string, value: string) {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    throw new StorageFullError();
-  }
-}
+const invoicesRef = collection(db, 'invoices');
+const appRef = collection(db, 'app');
+const settingsDoc = doc(appRef, 'settings');
+const qrisDoc = doc(appRef, 'qris');
+const countersDoc = doc(appRef, 'counters');
 
-function readInvoices(): InvoiceMap {
-  const raw = localStorage.getItem(KEY_INVOICES);
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw) as InvoiceMap;
-  } catch {
-    // Keep the damaged text: the next save would otherwise replace it with a nearly empty list
-    try {
-      localStorage.setItem(KEY_DAMAGED, raw);
-      localStorage.removeItem(KEY_INVOICES);
-    } catch {}
-    return {};
-  }
-}
+/** Invoice numbers are free text, but a document id cannot contain "/", be ".", or look like __x__. */
+const invoiceDoc = (num: string) => doc(invoicesRef, encodeURIComponent(num).replace(/\./g, '%2E').replace(/_/g, '%5F'));
 
-function readSettings(): Settings {
-  try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(KEY_SETTINGS) || '{}') };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-}
+// ------------------------------------------------------------------ live copy of the data
 
-const readSeq = () => Number(localStorage.getItem(KEY_SEQ)) || 0;
+let status: StoreStatus = 'loading';
+let invoices: InvoiceMap = {};
+let savedSettings: Partial<Settings> = {};
+// Typed but not sent yet: an incoming snapshot must not undo what the person is typing
+let unsentSettings: Partial<Settings> = {};
+let qris = '';
+let seq = 0;
+let settings: Settings = DEFAULT_SETTINGS;
 
-// ------------------------------------------------------------------ subscriptions
-
-let invoicesCache: InvoiceMap | null = null;
-let settingsCache: Settings | null = null;
 const listeners = new Set<() => void>();
-
-function changed() {
-  invoicesCache = null;
-  settingsCache = null;
-  listeners.forEach(l => l());
-}
+const emit = () => listeners.forEach(l => l());
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
-// Another tab saved: show its changes here as well
-if (typeof window !== 'undefined') window.addEventListener('storage', changed);
+function rebuildSettings() {
+  settings = { ...DEFAULT_SETTINGS, ...savedSettings, ...unsentSettings, qris };
+}
 
-const invoiceSnapshot = () => (invoicesCache ??= readInvoices());
-const settingsSnapshot = () => (settingsCache ??= readSettings());
+function writeFailed(err: unknown) {
+  console.error('[Firestore] Write failed:', err);
+  notify('Perubahan gagal tersimpan ke server dan dibatalkan. Cek koneksi atau hak akses akun ini.', 'alert');
+}
 
+function clearData() {
+  invoices = {};
+  savedSettings = {};
+  unsentSettings = {};
+  qris = '';
+  seq = 0;
+  rebuildSettings();
+}
+
+/** Starts the live listeners after login. Returns the function that stops them. */
+export function connectStore() {
+  let haveInvoices = false;
+  let haveApp = false;
+  const arrived = () => {
+    if (status === 'loading' && haveInvoices && haveApp) status = 'ready';
+    emit();
+  };
+  const refused = (err: FirestoreError) => {
+    console.error('[Firestore] Listener stopped:', err);
+    clearData();
+    status = err.code === 'permission-denied' ? 'denied' : 'error';
+    emit();
+  };
+
+  const stopInvoices = onSnapshot(
+    invoicesRef,
+    snap => {
+      invoices = Object.fromEntries(
+        snap.docs.map(d => {
+          const inv = d.data() as Invoice;
+          return [inv.invNum, inv];
+        })
+      );
+      haveInvoices = true;
+      arrived();
+    },
+    refused
+  );
+  const stopApp = onSnapshot(
+    appRef,
+    snap => {
+      const data = (name: string) => snap.docs.find(d => d.id === name)?.data();
+      savedSettings = (data('settings') as Partial<Settings>) ?? {};
+      qris = String(data('qris')?.image ?? '');
+      seq = Number(data('counters')?.seq) || 0;
+      rebuildSettings();
+      haveApp = true;
+      arrived();
+    },
+    refused
+  );
+  const flushWhenHidden = () => {
+    if (document.visibilityState === 'hidden') flushSettings();
+  };
+  document.addEventListener('visibilitychange', flushWhenHidden);
+
+  return () => {
+    flushSettings();
+    document.removeEventListener('visibilitychange', flushWhenHidden);
+    stopInvoices();
+    stopApp();
+    clearData();
+    status = 'loading';
+    emit();
+  };
+}
+
+const statusSnapshot = () => status;
+const invoiceSnapshot = () => invoices;
+const settingsSnapshot = () => settings;
+
+export const useStoreStatus = () => useSyncExternalStore(subscribe, statusSnapshot);
 export const useInvoices = () => useSyncExternalStore(subscribe, invoiceSnapshot);
 export const useSettings = () => useSyncExternalStore(subscribe, settingsSnapshot);
 export const getSettings = settingsSnapshot;
 
 // ------------------------------------------------------------------ invoices
 
-export const getInvoice = (num: string): Invoice | undefined => {
-  const db = readInvoices();
-  return Object.prototype.hasOwnProperty.call(db, num) ? db[num] : undefined;
-};
+export const getInvoice = (num: string): Invoice | undefined =>
+  Object.prototype.hasOwnProperty.call(invoices, num) ? invoices[num] : undefined;
 
 export const invoiceExists = (num: string) => getInvoice(num) !== undefined;
 
-/** Saves an invoice, re-reading first so a save in another tab is not lost. */
 export function saveInvoice(input: InvoiceInput, originalNum?: string): Invoice {
-  const db = readInvoices();
   const now = new Date().toISOString();
   const num = input.invNum.trim();
-  const createdAt = db[num]?.createdAt || (originalNum && db[originalNum]?.createdAt) || now;
+  const createdAt = getInvoice(num)?.createdAt || (originalNum && getInvoice(originalNum)?.createdAt) || now;
   const record = finalizeInvoice(input, createdAt, now);
-  if (originalNum && originalNum !== num) delete db[originalNum];
-  db[num] = record;
-  write(KEY_INVOICES, JSON.stringify(db));
+  const renamed = originalNum && originalNum !== num ? originalNum : null;
+
+  const next = { ...invoices, [num]: record };
+  const batch = writeBatch(db);
+  batch.set(invoiceDoc(num), record);
+  if (renamed) {
+    delete next[renamed];
+    batch.delete(invoiceDoc(renamed));
+  }
   const match = /^MPB-\d{8}-(\d+)$/.exec(num);
-  if (match && Number(match[1]) > readSeq()) write(KEY_SEQ, match[1]);
-  changed();
+  if (match && Number(match[1]) > seq) {
+    seq = Number(match[1]);
+    batch.set(countersDoc, { seq }, { merge: true });
+  }
+  invoices = next;
+  batch.commit().catch(writeFailed);
+  emit();
   return record;
 }
 
 export function deleteInvoice(num: string) {
-  const db = readInvoices();
-  delete db[num];
-  write(KEY_INVOICES, JSON.stringify(db));
-  changed();
+  const next = { ...invoices };
+  delete next[num];
+  const batch = writeBatch(db);
+  batch.delete(invoiceDoc(num));
+  invoices = next;
+  batch.commit().catch(writeFailed);
+  emit();
 }
 
 /** A new invoice's starting values. Saved only when the person presses Simpan. */
 export function blankInvoice(): InvoiceInput {
-  const s = readSettings();
   const today = toIso(new Date());
   const due = new Date();
   due.setDate(due.getDate() + 3);
   return {
-    invNum: nextInvoiceNumber(today, Object.keys(readInvoices()), readSeq()),
+    invNum: nextInvoiceNumber(today, Object.keys(invoices), seq),
     invDate: today,
     invDue: toIso(due),
     evStatus: 'Terjadwal',
@@ -161,24 +231,48 @@ export function blankInvoice(): InvoiceInput {
     taxPct: 0,
     dpPaid: 0,
     pelunasan: 0,
-    bankName: s.bankName,
-    bankAcc: s.bankAcc,
-    bankHolder: s.bankHolder,
-    note: s.note
+    bankName: settings.bankName,
+    bankAcc: settings.bankAcc,
+    bankHolder: settings.bankHolder,
+    note: settings.note
   };
 }
 
 // ------------------------------------------------------------------ settings
 
+const SETTINGS_WRITE_DELAY_MS = 800;
+let settingsTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Sends what was typed. Settings save on every keystroke, and Firestore bills per write. */
+export function flushSettings() {
+  clearTimeout(settingsTimer);
+  if (!Object.keys(unsentSettings).length) return;
+  const patch = unsentSettings;
+  unsentSettings = {};
+  savedSettings = { ...savedSettings, ...patch };
+  setDoc(settingsDoc, patch, { merge: true }).catch(writeFailed);
+}
+
 export function updateSettings(patch: Partial<Settings>) {
-  write(KEY_SETTINGS, JSON.stringify({ ...readSettings(), ...patch }));
-  changed();
+  const { qris: image, ...rest } = patch;
+  if (image !== undefined) {
+    if (image.length > MAX_QRIS_CHARS) throw new StorageFullError('Gambar QRIS terlalu besar. Pakai gambar yang lebih kecil.');
+    qris = image;
+    setDoc(qrisDoc, { image }).catch(writeFailed);
+  }
+  if (Object.keys(rest).length) {
+    unsentSettings = { ...unsentSettings, ...rest };
+    clearTimeout(settingsTimer);
+    settingsTimer = setTimeout(flushSettings, SETTINGS_WRITE_DELAY_MS);
+  }
+  rebuildSettings();
+  emit();
 }
 
 // ------------------------------------------------------------------ backup
 
 export function backupJson(): string {
-  return JSON.stringify({ app: 'marka-photobooth', version: 1, exportedAt: new Date().toISOString(), invoices: readInvoices(), settings: readSettings(), seq: readSeq() }, null, 1);
+  return JSON.stringify({ app: 'marka-photobooth', version: 1, exportedAt: new Date().toISOString(), invoices, settings, seq }, null, 1);
 }
 
 export interface ParsedBackup {
@@ -195,31 +289,95 @@ export function parseBackup(text: string): ParsedBackup {
   const isNew = data.app === 'marka-photobooth';
   const source: Record<string, unknown> = isNew ? data.invoices || {} : data;
   const now = new Date().toISOString();
-  const invoices: Invoice[] = [];
+  const parsed: Invoice[] = [];
   let skipped = 0;
   for (const key of Object.keys(source)) {
     const inv = normalizeInvoice(key, source[key], now);
-    if (inv) invoices.push(inv);
+    if (inv) parsed.push(inv);
     else skipped += 1;
   }
-  let settings: Partial<Settings> | null = null;
+  let parsedSettings: Partial<Settings> | null = null;
   if (isNew && data.settings && typeof data.settings === 'object') {
     const s = data.settings;
-    settings = {};
-    for (const k of ['bankName', 'bankAcc', 'bankHolder', 'note'] as const) if (typeof s[k] === 'string') settings[k] = s[k];
-    if (typeof s.qris === 'string' && s.qris.startsWith('data:image/')) settings.qris = s.qris;
-    if (typeof s.webhookUrl === 'string' && (s.webhookUrl === '' || s.webhookUrl.startsWith('https://'))) settings.webhookUrl = s.webhookUrl;
-    if (typeof s.autoSend === 'boolean') settings.autoSend = s.autoSend;
+    parsedSettings = {};
+    for (const k of ['bankName', 'bankAcc', 'bankHolder', 'note'] as const) if (typeof s[k] === 'string') parsedSettings[k] = s[k];
+    if (typeof s.qris === 'string' && s.qris.startsWith('data:image/')) parsedSettings.qris = s.qris;
+    if (typeof s.webhookUrl === 'string' && (s.webhookUrl === '' || s.webhookUrl.startsWith('https://'))) parsedSettings.webhookUrl = s.webhookUrl;
+    if (typeof s.autoSend === 'boolean') parsedSettings.autoSend = s.autoSend;
   }
-  return { invoices, skipped, settings, seq: isNew ? Number(data.seq) || 0 : 0 };
+  return { invoices: parsed, skipped, settings: parsedSettings, seq: isNew ? Number(data.seq) || 0 : 0 };
 }
 
-/** Merges a backup in. Invoices with the same number are replaced. */
-export function applyBackup(b: ParsedBackup) {
-  const db = readInvoices();
-  for (const inv of b.invoices) db[inv.invNum] = inv;
-  write(KEY_INVOICES, JSON.stringify(db));
-  if (b.seq > readSeq()) write(KEY_SEQ, String(b.seq));
-  if (b.settings) write(KEY_SETTINGS, JSON.stringify({ ...readSettings(), ...b.settings }));
-  changed();
+const BATCH_SIZE = 400; // Firestore takes at most 500 writes in one batch
+
+/** Merges a backup in. Invoices with the same number are replaced. Resolves once the server has it. */
+export async function applyBackup(b: ParsedBackup) {
+  if (b.settings) updateSettings(b.settings);
+  flushSettings();
+
+  const commits: Promise<void>[] = [];
+  for (let i = 0; i < b.invoices.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db);
+    for (const inv of b.invoices.slice(i, i + BATCH_SIZE)) batch.set(invoiceDoc(inv.invNum), inv);
+    commits.push(batch.commit());
+  }
+  if (b.seq > seq) {
+    seq = b.seq;
+    commits.push(setDoc(countersDoc, { seq }, { merge: true }));
+  }
+  invoices = { ...invoices, ...Object.fromEntries(b.invoices.map(inv => [inv.invNum, inv])) };
+  emit();
+  await Promise.all(commits);
+}
+
+// ------------------------------------------------------------------ data from the localStorage version
+
+const LEGACY_INVOICES = 'marka_invoices';
+const LEGACY_SETTINGS = 'marka_settings';
+const LEGACY_SEQ = 'marka_seq';
+
+/** What the app saved in this browser before Firestore. Null when there is nothing readable. */
+export function readLegacyData(): ParsedBackup | null {
+  try {
+    const rawInvoices = localStorage.getItem(LEGACY_INVOICES);
+    const rawSettings = localStorage.getItem(LEGACY_SETTINGS);
+    if (!rawInvoices && !rawSettings) return null;
+    return parseBackup(
+      JSON.stringify({
+        app: 'marka-photobooth',
+        invoices: rawInvoices ? JSON.parse(rawInvoices) : {},
+        settings: rawSettings ? JSON.parse(rawSettings) : null,
+        seq: Number(localStorage.getItem(LEGACY_SEQ)) || 0
+      })
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sends this browser's old data to Firestore without overwriting newer work: an invoice goes up
+ * only if it is missing or newer there, a setting only if it is still empty there. The old data is
+ * kept under a new name once the server has it, so it is not offered again and can still be rescued.
+ */
+export async function moveLegacyData(b: ParsedBackup): Promise<{ moved: number; qrisTooBig: boolean }> {
+  const newer = b.invoices.filter(inv => {
+    const current = getInvoice(inv.invNum);
+    return !current || inv.updatedAt > current.updatedAt;
+  });
+  const saved: Partial<Settings> = { ...savedSettings, qris };
+  const empty = Object.fromEntries(Object.entries(b.settings ?? {}).filter(([k]) => !saved[k as keyof Settings])) as Partial<Settings>;
+  const qrisTooBig = (empty.qris?.length ?? 0) > MAX_QRIS_CHARS;
+  if (qrisTooBig) delete empty.qris;
+
+  await applyBackup({ ...b, invoices: newer, settings: empty });
+
+  for (const key of [LEGACY_INVOICES, LEGACY_SETTINGS, LEGACY_SEQ]) {
+    const value = localStorage.getItem(key);
+    if (value === null) continue;
+    // Removed first: a second copy of a full store would not fit
+    localStorage.removeItem(key);
+    localStorage.setItem(`${key}_dipindah`, value);
+  }
+  return { moved: newer.length, qrisTooBig };
 }

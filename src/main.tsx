@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Navigate, RouterProvider, createBrowserRouter, useParams } from 'react-router-dom';
 import { AppShell } from './app/App';
+import { AuthGate } from './features/auth/AuthGate';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { InvoiceFormView } from './features/invoice/InvoiceFormView';
 import { SettingsView } from './features/settings/SettingsView';
@@ -15,7 +16,11 @@ function InvoiceRoute() {
 
 const router = createBrowserRouter([
   {
-    element: <AppShell />,
+    element: (
+      <AuthGate>
+        <AppShell />
+      </AuthGate>
+    ),
     children: [
       { path: '/dashboard', element: <DashboardView /> },
       { path: '/invoice/baru', element: <InvoiceRoute /> },

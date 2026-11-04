@@ -18,6 +18,7 @@ export default defineConfig(() => {
           manualChunks(id: string) {
             if (!id.includes('node_modules')) return undefined;
             if (id.includes('react-dom') || id.includes('react-router') || id.match(/node_modules\/react\//) || id.includes('scheduler')) return 'vendor-react';
+            if (id.includes('firebase')) return 'vendor-firebase';
             return undefined;
           }
         }

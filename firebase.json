@@ -1,0 +1,14 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Marka Photobooth",
+        "supportEmail": "markaselfstudio@gmail.com"
+      }
+    }
+  }
+}

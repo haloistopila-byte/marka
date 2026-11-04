@@ -1,8 +1,9 @@
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { FilePlus2, LayoutDashboard, Settings, type LucideIcon } from 'lucide-react';
-import { cx } from '../components/ui';
+import { FilePlus2, LayoutDashboard, LogOut, Settings, type LucideIcon } from 'lucide-react';
+import { Button, cx } from '../components/ui';
 import { ConfirmHost, Toaster } from '../components/ui/feedback';
+import { signOutUser, useSession } from '../features/auth/session.ts';
 
 const LINKS: Array<{ to: string; label: string; icon: LucideIcon }> = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -27,16 +28,24 @@ const NavItem: React.FC<{ to: string; label: string; icon: LucideIcon; compact?:
 );
 
 /** The app shell: a sidebar on wide screens, a logo bar and bottom tabs on a phone. */
-export const AppShell: React.FC = () => (
+export const AppShell: React.FC = () => {
+  const session = useSession();
+  const email = session.state === 'in' ? session.user.email : null;
+  return (
   <div className="min-h-screen font-ui md:flex">
     <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-line bg-white p-4 md:flex">
       <img src="/marka-logo.png" alt="Marka Photobooth" className="mb-6 ml-3 mt-1 h-9 w-fit object-contain" />
       <nav aria-label="Menu utama" className="space-y-1">
         {LINKS.map(l => <NavItem key={l.to} {...l} />)}
       </nav>
+      <div className="mt-auto space-y-1 border-t border-rule pt-3">
+        <p className="truncate px-3 text-[12px] text-ink-3" title={email ?? undefined}>{email}</p>
+        <Button variant="ghost" size="sm" icon={LogOut} className="w-full justify-start" onClick={signOutUser}>Keluar</Button>
+      </div>
     </aside>
     <header className="flex h-14 items-center border-b border-line bg-white px-5 md:hidden">
       <img src="/marka-logo.png" alt="Marka Photobooth" className="h-7 object-contain" />
+      <Button variant="ghost" size="sm" icon={LogOut} className="ml-auto" aria-label={`Keluar dari ${email}`} onClick={signOutUser} />
     </header>
     <main className="min-w-0 flex-1">
       <Outlet />
@@ -47,4 +56,5 @@ export const AppShell: React.FC = () => (
     <Toaster />
     <ConfirmHost />
   </div>
-);
+  );
+};

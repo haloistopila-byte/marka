@@ -1,28 +1,35 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { Download, Trash2, Upload } from 'lucide-react';
-import { Button, Field, Input, Page, PageHeader, Panel, Textarea, Toggle } from '../../components/ui';
+import { Button, Field, Input, Notice, Page, PageHeader, Panel, Textarea, Toggle } from '../../components/ui';
 import { confirmDialog, notify } from '../../components/ui/feedback';
 import { toIso } from '../invoice/figures.ts';
-import { StorageFullError, applyBackup, backupJson, parseBackup, updateSettings, useInvoices, useSettings, type Settings } from '../invoice/store.ts';
+import { MAX_QRIS_CHARS, StorageFullError, applyBackup, backupJson, moveLegacyData, parseBackup, readLegacyData, updateSettings, useInvoices, useSettings, type Settings } from '../invoice/store.ts';
 
-const MAX_QRIS_SIDE = 800;
+const QRIS_SIDES = [800, 600, 400];
 
-/** Shrinks the QRIS image: browser storage is small, and a phone photo would fill it. */
+/** Shrinks the QRIS image until it fits a Firestore document: a phone photo would not. */
 async function shrinkImage(file: File): Promise<string> {
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_QRIS_SIDE / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  let url = '';
+  for (const side of QRIS_SIDES) {
+    const scale = Math.min(1, side / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    url = canvas.toDataURL('image/png');
+    if (url.length <= MAX_QRIS_CHARS) break;
+  }
   bitmap.close();
-  return canvas.toDataURL('image/png');
+  return url;
 }
 
 export const SettingsView: React.FC = () => {
   const settings = useSettings();
   const count = Object.keys(useInvoices()).length;
   const restoreInput = useRef<HTMLInputElement>(null);
+  const [legacy, setLegacy] = useState(readLegacyData);
+  const [moving, setMoving] = useState(false);
 
   const change = (patch: Partial<Settings>) => {
     try {
@@ -73,10 +80,26 @@ export const SettingsView: React.FC = () => {
         confirmLabel: 'Pulihkan'
       });
       if (!ok) return;
-      applyBackup(parsed);
+      await applyBackup(parsed);
       notify(`${parsed.invoices.length} invoice dipulihkan.`, 'ok');
     } catch (err) {
       notify(err instanceof StorageFullError ? err.message : 'File backup tidak valid.', 'alert');
+    }
+  };
+
+  const moveLegacy = async () => {
+    if (!legacy) return;
+    setMoving(true);
+    try {
+      const { moved, qrisTooBig } = await moveLegacyData(legacy);
+      setLegacy(null);
+      notify(`${moved} invoice dipindahkan ke server.`, 'ok');
+      if (qrisTooBig) notify('Gambar QRIS lama terlalu besar. Upload ulang di bagian QRIS.', 'alert');
+    } catch (err) {
+      console.error('[Firestore] Moving old data failed:', err);
+      notify('Gagal memindahkan data. Data lama tetap aman di browser ini, coba lagi.', 'alert');
+    } finally {
+      setMoving(false);
     }
   };
 
@@ -84,7 +107,16 @@ export const SettingsView: React.FC = () => {
 
   return (
     <Page narrow>
-      <PageHeader title="Pengaturan" description="Perubahan tersimpan otomatis di browser ini." />
+      <PageHeader title="Pengaturan" description="Perubahan tersimpan otomatis dan berlaku untuk semua akun tim." />
+
+      {legacy && (
+        <Notice
+          tone="warn"
+          action={<Button size="sm" variant="primary" disabled={moving} onClick={moveLegacy}>{moving ? 'Memindahkan…' : 'Pindahkan'}</Button>}
+        >
+          Browser ini masih menyimpan {legacy.invoices.length} invoice dan pengaturan dari versi lama. Pindahkan ke server supaya muncul di app. Invoice yang lebih baru di server tidak ditimpa.
+        </Notice>
+      )}
 
       <Panel title="Nilai awal invoice baru" description="Invoice yang sudah ada tidak berubah.">
         <div className="grid gap-4 sm:grid-cols-3">
@@ -118,7 +150,7 @@ export const SettingsView: React.FC = () => {
         </div>
       </Panel>
 
-      <Panel title="Backup data" description={`${count} invoice tersimpan di browser ini. File backup juga berisi pengaturan dan QRIS. Restore menerima backup dari app lama.`}>
+      <Panel title="Backup data" description={`${count} invoice tersimpan. File backup juga berisi pengaturan dan QRIS. Restore menerima backup dari app lama.`}>
         <div className="flex flex-wrap gap-2">
           <Button icon={Download} onClick={backup}>Backup data</Button>
           <Button icon={Upload} onClick={() => restoreInput.current?.click()}>Restore data</Button>
