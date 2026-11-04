@@ -31,7 +31,7 @@ export async function startServer(rootDir: string, isProd: boolean) {
   app.use(errorHandler);
 
   // Express 5 also calls this when listening fails, for example when the port is already taken
-  app.listen(config.port, '0.0.0.0', (err?: Error) => {
+  app.listen(config.port, config.host, (err?: Error) => {
     if (err) {
       console.error(`[Server] Gagal jalan di port ${config.port}: ${err.message}`);
       process.exit(1);

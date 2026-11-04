@@ -16,7 +16,7 @@ import {
   type InvoiceInput,
   type LineItem
 } from './figures.ts';
-import { StorageFullError, blankInvoice, getInvoice, invoiceExists, saveInvoice, useSettings } from './store.ts';
+import { StorageFullError, blankInvoice, getInvoice, invoiceExists, saveInvoice, useCalendarStatus, useSettings } from './store.ts';
 
 export const PAY_TONE = { Unpaid: 'warn', 'Partially Paid': 'data', Paid: 'ok' } as const;
 
@@ -140,7 +140,8 @@ const Form: React.FC<{ initial: InvoiceInput; originalNum?: string }> = ({ initi
     const rec = await persist();
     if (rec) await sendToGoogle(rec);
   };
-  const calUrl = calendarUrl(draft);
+  // Once the calendar syncs by itself, adding an event by hand would only make a duplicate
+  const calUrl = useCalendarStatus().connected ? null : calendarUrl(draft);
 
   return (
     <Page narrow>

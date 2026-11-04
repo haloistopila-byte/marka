@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { calendarUrl, computeFigures, daysUntil, finalizeInvoice, nextInvoiceNumber, normalizeInvoice, type InvoiceInput } from './figures.ts';
+import { calendarUrl, computeFigures, daysUntil, finalizeInvoice, formatMonth, isIsoMonth, monthGrid, nextInvoiceNumber, normalizeInvoice, shiftMonth, weekday, type InvoiceInput } from './figures.ts';
 
 const money = (over: Partial<InvoiceInput> = {}) => ({
   packageItems: [{ desc: 'Unlimited 3 Jam', qty: 1, price: 2800000, total: 2800000 }],
@@ -92,4 +92,29 @@ test('calendar link handles timed, overnight and all-day events', () => {
   assert.equal(dates(calendarUrl(base)), '20261231/20270101');
   assert.equal(dates(calendarUrl({ ...base, evStart: '18:00', evEnd: '21:00' })), '20261231T180000/20261231T210000');
   assert.equal(dates(calendarUrl({ ...base, evStart: '22:00', evEnd: '01:00' })), '20261231T220000/20270101T010000');
+});
+
+test('a month page runs in whole weeks from Monday to Sunday', () => {
+  // November 2026 starts on a Sunday and ends on a Monday, so it needs six rows
+  const nov = monthGrid('2026-11');
+  assert.equal(nov.length, 42);
+  assert.equal(nov[0], '2026-10-26');
+  assert.equal(nov[6], '2026-11-01');
+  assert.equal(nov[41], '2026-12-06');
+  // February 2027 starts on a Monday and has exactly four weeks
+  const feb = monthGrid('2027-02');
+  assert.equal(feb.length, 28);
+  assert.equal(feb[0], '2027-02-01');
+  assert.equal(feb[27], '2027-02-28');
+});
+
+test('months step across a year and read in Indonesian', () => {
+  assert.equal(shiftMonth('2026-12', 1), '2027-01');
+  assert.equal(shiftMonth('2026-01', -1), '2025-12');
+  assert.equal(formatMonth('2026-11'), 'November 2026');
+  assert.equal(weekday('2026-11-04'), 'Rab');
+  assert.equal(weekday('2026-11-01'), 'Min');
+  assert.equal(isIsoMonth('2026-11'), true);
+  assert.equal(isIsoMonth('2026-13'), false);
+  assert.equal(isIsoMonth('abc'), false);
 });

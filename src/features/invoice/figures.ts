@@ -197,7 +197,93 @@ export function formatMoney(n: number): string {
   return 'Rp ' + Math.round(Number.isFinite(n) ? n : 0).toLocaleString('id-ID');
 }
 
-// ------------------------------------------------------------------ Google Calendar link
+// ------------------------------------------------------------------ calendar month
+
+export const isIsoDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+export const isIsoMonth = (s: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+
+export function shiftMonth(month: string, by: number): string {
+  const [y, m] = month.split('-').map(Number);
+  return toIso(new Date(y, m - 1 + by, 1)).slice(0, 7);
+}
+
+export function formatMonth(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  return `${MONTHS[m - 1]} ${y}`;
+}
+
+/** Every date on a month's page, in whole weeks from Monday to Sunday: 28, 35 or 42 of them. */
+export function monthGrid(month: string): string[] {
+  const [y, m] = month.split('-').map(Number);
+  const before = (new Date(y, m - 1, 1).getDay() + 6) % 7;
+  const days = new Date(y, m, 0).getDate();
+  const cells = Math.ceil((before + days) / 7) * 7;
+  return Array.from({ length: cells }, (_, i) => toIso(new Date(y, m - 1, 1 - before + i)));
+}
+
+export const WEEKDAYS = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+
+export function weekday(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return WEEKDAYS[(new Date(y, m - 1, d).getDay() + 6) % 7];
+}
+
+// ------------------------------------------------------------------ Google Calendar
+
+/** Used when an invoice has a start time but no end: Google rejects an event that ends as it starts. */
+const DEFAULT_EVENT_HOURS = 3;
+
+const eventTitle = (i: Pick<InvoiceInput, 'evName' | 'custName'>) => `Marka: ${i.evName || 'Event'} (${i.custName || 'Customer'})`;
+
+/** When a timed event ends. An end time earlier than the start means the booth runs past midnight. */
+function eventEnd(i: Pick<InvoiceInput, 'evDate' | 'evStart' | 'evEnd'>): { date: string; time: string } {
+  if (i.evEnd && i.evEnd !== i.evStart) return { date: i.evEnd < i.evStart ? addDays(i.evDate, 1) : i.evDate, time: i.evEnd };
+  const [h, m] = i.evStart.split(':');
+  const hour = Number(h) + DEFAULT_EVENT_HOURS;
+  return { date: hour >= 24 ? addDays(i.evDate, 1) : i.evDate, time: `${String(hour % 24).padStart(2, '0')}:${m}` };
+}
+
+/** Invoice numbers are free text, but a document id cannot contain "/", be ".", or look like __x__. */
+export const invoiceDocId = (num: string) => encodeURIComponent(num).replace(/\./g, '%2E').replace(/_/g, '%5F');
+
+export interface CalendarEvent {
+  summary: string;
+  description: string;
+  location: string;
+  start: { date: string } | { dateTime: string; timeZone: string };
+  end: { date: string } | { dateTime: string; timeZone: string };
+  reminders: { useDefault: false; overrides: Array<{ method: 'popup'; minutes: number }> };
+}
+
+/** The event an invoice should have on the calendar, or null when it should have none. */
+export function calendarEvent(i: Invoice): CalendarEvent | null {
+  if (!i.evDate || i.evStatus === 'Batal') return null;
+  const timeZone = 'Asia/Jakarta';
+  const end = i.evStart ? eventEnd(i) : null;
+  const items = [...i.packageItems, ...i.addonItems].map(it => it.desc).filter(Boolean);
+  return {
+    summary: eventTitle(i),
+    description: [
+      `Invoice ${i.invNum}`,
+      `Customer: ${i.custName}`,
+      `HP: ${i.custPhone}`,
+      ...(items.length ? [`Paket: ${items.join(', ')}`] : []),
+      `Pembayaran: ${i.invStatus}, sisa ${formatMoney(i.sisa)}`
+    ].join('\n'),
+    location: i.evLoc,
+    start: end ? { dateTime: `${i.evDate}T${i.evStart}:00`, timeZone } : { date: i.evDate },
+    end: end ? { dateTime: `${end.date}T${end.time}:00`, timeZone } : { date: addDays(i.evDate, 1) },
+    // The day before, and two hours before setup
+    reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 24 * 60 }, { method: 'popup', minutes: 120 }] }
+  };
+}
+
+/** Invoices whose saved version is not the one last sent, and what was sent for invoices now gone. */
+export function invoicesToSync(invoices: Record<string, { updatedAt: string }>, synced: Record<string, string>): string[] {
+  const changed = Object.keys(invoices).filter(num => synced[invoiceDocId(num)] !== invoices[num].updatedAt);
+  const gone = Object.keys(synced).map(decodeURIComponent).filter(num => !Object.prototype.hasOwnProperty.call(invoices, num));
+  return [...changed, ...gone];
+}
 
 /** A link that opens Google Calendar's "new event" page already filled in, in Jakarta time. */
 export function calendarUrl(i: Pick<InvoiceInput, 'invNum' | 'custName' | 'custPhone' | 'evName' | 'evDate' | 'evLoc' | 'evStart' | 'evEnd'>): string | null {
@@ -205,16 +291,14 @@ export function calendarUrl(i: Pick<InvoiceInput, 'invNum' | 'custName' | 'custP
   const day = i.evDate.replace(/-/g, '');
   let dates: string;
   if (i.evStart) {
-    const end = i.evEnd || i.evStart;
-    // An end time earlier than the start means the booth runs past midnight
-    const endDay = end < i.evStart ? addDays(i.evDate, 1).replace(/-/g, '') : day;
-    dates = `${day}T${i.evStart.replace(':', '')}00/${endDay}T${end.replace(':', '')}00`;
+    const end = eventEnd(i);
+    dates = `${day}T${i.evStart.replace(':', '')}00/${end.date.replace(/-/g, '')}T${end.time.replace(':', '')}00`;
   } else {
     dates = `${day}/${addDays(i.evDate, 1).replace(/-/g, '')}`;
   }
   const params = new URLSearchParams({
     action: 'TEMPLATE',
-    text: `Marka: ${i.evName || 'Event'} (${i.custName || 'Customer'})`,
+    text: eventTitle(i),
     dates,
     ctz: 'Asia/Jakarta',
     location: i.evLoc,

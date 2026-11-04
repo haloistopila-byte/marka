@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Navigate, RouterProvider, createBrowserRouter, useParams } from 'react-router-dom';
 import { AppShell } from './app/App';
 import { AuthGate } from './features/auth/AuthGate';
+import { CalendarView } from './features/calendar/CalendarView';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { InvoiceFormView } from './features/invoice/InvoiceFormView';
 import { SettingsView } from './features/settings/SettingsView';
@@ -23,6 +24,7 @@ const router = createBrowserRouter([
     ),
     children: [
       { path: '/dashboard', element: <DashboardView /> },
+      { path: '/kalender', element: <CalendarView /> },
       { path: '/invoice/baru', element: <InvoiceRoute /> },
       { path: '/invoice/:num', element: <InvoiceRoute /> },
       { path: '/pengaturan', element: <SettingsView /> },

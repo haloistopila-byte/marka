@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Download, Trash2, Upload } from 'lucide-react';
 import { Button, Field, Input, Notice, Page, PageHeader, Panel, Textarea, Toggle } from '../../components/ui';
 import { confirmDialog, notify } from '../../components/ui/feedback';
+import { CalendarPanel } from '../calendar/CalendarPanel';
 import { toIso } from '../invoice/figures.ts';
 import { MAX_QRIS_CHARS, StorageFullError, applyBackup, backupJson, moveLegacyData, parseBackup, readLegacyData, updateSettings, useInvoices, useSettings, type Settings } from '../invoice/store.ts';
 
@@ -141,7 +142,9 @@ export const SettingsView: React.FC = () => {
         </div>
       </Panel>
 
-      <Panel title="Google Sheets dan Calendar" description="Mengirim invoice ke web app Google Apps Script yang sudah Anda pasang.">
+      <CalendarPanel />
+
+      <Panel title="Google Apps Script" description="Mengirim invoice ke web app Google Apps Script yang sudah Anda pasang.">
         <div className="space-y-3">
           <Field label="URL Apps Script Web App" htmlFor="s-hook" error={webhookInvalid ? 'URL harus diawali https://' : undefined}>
             <Input id="s-hook" placeholder="https://script.google.com/macros/s/xxxxx/exec" value={settings.webhookUrl} onChange={e => change({ webhookUrl: e.target.value })} />
