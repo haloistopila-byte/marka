@@ -18,9 +18,28 @@ npm run lint
 
 Variabel environment untuk server Express ada di `.env.example`.
 
-## Menjalankan di Windows 11
+## Memasang di Windows 11
 
-Pasang dulu [Node.js LTS](https://nodejs.org) (22.18 atau lebih baru) dan [Git](https://git-scm.com/download/win), lalu ambil project sekali saja:
+Jalankan `Marka-Photobooth-Setup-<versi>.exe`. Tidak perlu Node, Git, atau hak administrator, dan app muncul di Desktop dan Start Menu. Karena installer belum ditandatangani, Windows bisa menampilkan peringatan SmartScreen: pilih **More info**, lalu **Run anyway**.
+
+Saat dibuka, app berjalan di browser bawaan di http://localhost:3000. Biarkan jendela hitamnya terbuka selama app dipakai, dan tutup untuk mematikannya. App hanya bisa dibuka dari komputer itu, dan internet tetap perlu untuk login dan data.
+
+- **Update:** versi hasil installer tidak update sendiri. Jalankan installer versi baru di atasnya, pengaturan tidak tertimpa.
+- **Google Calendar:** isi `%APPDATA%\Marka Photobooth\.env`, atau buka lewat Start Menu, Marka Photobooth, **Pengaturan Google Calendar**. Lalu tutup dan buka lagi app-nya.
+- **Menghapus:** lewat Settings, Apps, Installed apps. Data di Firestore tidak ikut terhapus.
+
+### Membuat installer
+
+```bash
+brew install makensis
+npm run build:installer
+```
+
+Hasilnya ada di `build/installer/`. Versinya diambil dari `package.json`, jadi naikkan dulu sebelum membagikan versi baru. Isinya hasil build, paket yang dipakai server, dan Node untuk Windows. `.env` dan kunci service account tidak pernah ikut, jadi file ini aman dibagikan.
+
+## Menjalankan di Windows 11 dari Git
+
+Cara ini untuk komputer yang ingin update otomatis dari GitHub. Pasang dulu [Node.js LTS](https://nodejs.org) (22.18 atau lebih baru) dan [Git](https://git-scm.com/download/win), lalu ambil project sekali saja:
 
 ```bat
 git clone https://github.com/haloistopila-byte/marka.git
@@ -66,7 +85,7 @@ Langkah 1 sampai 3 dilakukan sekali, dengan akun `markaselfstudio@gmail.com`, di
 2. Google Auth Platform: tambahkan scope `calendar.events`, lalu **Publish app** ke status In production. Selama masih Testing, Google mencabut izinnya setelah 7 hari dan sinkron minta dihubungkan ulang.
 3. Buat **OAuth Client** tipe Web application dengan redirect URI `http://localhost:3000/auth/google/callback`.
 4. Firebase Console, Project settings, Service accounts: buat kunci baru dan simpan di luar folder project.
-5. Di **setiap komputer** yang menjalankan app, buat file `.env` di folder project dari `.env.example`, lalu tutup dan buka lagi app-nya. File ini tidak masuk Git, jadi tidak ikut auto update dan tidak tertimpa olehnya.
+5. Di **setiap komputer** yang menjalankan app, isi `.env`, lalu tutup dan buka lagi app-nya. Untuk app hasil installer, file ini ada di `%APPDATA%\Marka Photobooth`. Untuk app dari Git, buat di folder project dari `.env.example`. File ini tidak ikut update dan tidak tertimpa olehnya.
 6. Di Pengaturan, tekan **Hubungkan Akun Google** dan pilih akun Marka. Akun di luar tim ditolak.
 
 `.env` berisi rahasia yang memberi akses penuh ke database, jadi pasang hanya di komputer tepercaya.

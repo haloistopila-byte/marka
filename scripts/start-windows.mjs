@@ -1,7 +1,8 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { URL, isUp, openBrowser, runServer, say } from './launch.mjs';
 
 /**
  * What jalankan-windows.bat runs: update from GitHub, build if needed, start the app, open the browser.
@@ -10,13 +11,8 @@ import { fileURLToPath } from 'node:url';
  */
 
 const BRANCH = 'main';
-const PORT = process.env.PORT || '3000';
-const URL = `http://localhost:${PORT}`;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SERVER_WAIT_MS = 30_000;
 const GIT_TIMEOUT_MS = 60_000;
-
-const say = (message = '') => console.log(message);
 
 /** Runs a command and shows its output. shell is what lets Windows find npm.cmd. */
 const run = (command, timeout) => spawnSync(command, { cwd: ROOT, shell: true, stdio: 'inherit', timeout }).status === 0;
@@ -98,12 +94,6 @@ function prepare() {
   return true;
 }
 
-const isUp = () => fetch(`${URL}/api/health`, { signal: AbortSignal.timeout(2000) }).then(r => r.ok, () => false);
-
-function openBrowser() {
-  if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '""', URL], { stdio: 'ignore', detached: true }).unref();
-}
-
 async function main() {
   if (await isUp()) {
     say(`App sudah jalan. Membuka ${URL}`);
@@ -114,22 +104,7 @@ async function main() {
     say('App gagal disiapkan. Baca pesan di atas.');
     return 1;
   }
-  const server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'inherit', env: { ...process.env, HOST: '127.0.0.1', PORT } });
-  const stopped = new Promise(resolve => server.on('exit', code => resolve(code ?? 1)));
-  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.kill());
-
-  const deadline = Date.now() + SERVER_WAIT_MS;
-  while (Date.now() < deadline && server.exitCode === null) {
-    if (await isUp()) {
-      say();
-      say(`Marka Photobooth jalan di ${URL} (versi ${git('rev-parse --short HEAD').out || 'tanpa git'})`);
-      say('Biarkan jendela ini terbuka. Tutup untuk mematikan app.');
-      openBrowser();
-      break;
-    }
-    await new Promise(resolve => setTimeout(resolve, 300));
-  }
-  return stopped;
+  return runServer({ root: ROOT, envDir: ROOT, version: () => git('rev-parse --short HEAD').out || 'tanpa git' });
 }
 
 process.exitCode = await main();

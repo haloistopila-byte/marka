@@ -1,6 +1,9 @@
-// The Windows launcher passes no secrets along, so they are read from .env in the project folder
+import path from 'path';
+
+// The Windows launchers pass no secrets along, so they are read from .env. ENV_DIR is the folder they
+// keep it in: the project folder, or the user's own folder for an installed app.
 try {
-  process.loadEnvFile();
+  process.loadEnvFile(process.env.ENV_DIR ? path.join(process.env.ENV_DIR, '.env') : undefined);
 } catch {
   // No .env: the app runs, and Google Calendar says what is missing when someone uses it
 }
