@@ -104,7 +104,8 @@ async function main() {
     say('App gagal disiapkan. Baca pesan di atas.');
     return 1;
   }
-  return runServer({ root: ROOT, envDir: ROOT, version: () => git('rev-parse --short HEAD').out || 'tanpa git' });
+  const { code } = await runServer({ root: ROOT, envDir: ROOT, version: () => git('rev-parse --short HEAD').out || 'tanpa git' });
+  return code;
 }
 
 process.exitCode = await main();
